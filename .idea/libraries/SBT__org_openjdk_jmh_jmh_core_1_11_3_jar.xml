@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="SBT: org.openjdk.jmh:jmh-core:1.11.3:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.openjdk.jmh/jmh-core/jars/jmh-core-1.11.3.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.openjdk.jmh/jmh-core/srcs/jmh-core-1.11.3-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
