@@ -10,18 +10,19 @@ import vegas.render.WindowRenderer._
 
 object ExampleApp extends App {
 
-  def genX(n: Int) = DenseMatrix.rand[Double](n, 1).map(x => x * 2 * Math.PI )
-  def func(x: Double) = { math.sin(x) + ( randomDouble() * 0.01 ) }
+  def genX(n: Int) = (0 until n).map { i => DenseVector.rand[Double](7) }
+  def func(x: DenseVector[Double]): Double = { math.sin(sum(x)) + ( randomDouble() * 0.01 ) }
 
   val gp = new GP(new BKernel, new ExpectedImprovement, 0.1)
 
   val obsX = genX(50)
-  val obsY = obsX(*, ::).map(x => func(x(0)))
+  val obsY = DenseVector(obsX.map(func): _*)
 
   gp.update(obsX, obsY)
 
-  val newX = genX(1000000)
-  val newT = gp.predict(newX(*, ::).toIndexedSeq.map(_.t)).map(_._1)
+//  val newX = genX(1000000)
+//  val newT = gp.predict(newX).map(_._1)
+  val r = gp.nextBatch(-1)
 
   println("Plotting!")
 //  Vegas()

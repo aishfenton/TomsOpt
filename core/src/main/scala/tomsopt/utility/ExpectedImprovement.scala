@@ -1,12 +1,17 @@
 package tomsopt.utility
 
+import breeze.linalg.randomDouble
+import breeze.stats.distributions.Gaussian
+
 /**
   * @author Aish Fenton.
   */
 class ExpectedImprovement extends Utility {
 
-  def apply(mean: Double, variance: Double, tMax: Double): Double = {
-    1.0
+  @inline
+  def apply(mean: Double, variance: Double, tBest: Double): Double = {
+    val dist = Gaussian(mean, variance)
+    ((mean - tBest) * dist.cdf(tBest)) + (variance * dist.pdf(tBest))
   }
 
 }

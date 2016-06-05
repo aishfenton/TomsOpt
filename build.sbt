@@ -10,7 +10,9 @@ lazy val commonSettings = Seq(
     "com.github.aishfenton" %% "vegas" % "0.2.4"
   ),
   scalacOptions += "-optimize",
-  javaOptions in run += "-Xmx8G"
+  javaOptions in run ++= Seq(
+    "-Xmx8G"
+  )
 )
 
 lazy val core = project

@@ -16,22 +16,39 @@ class EndToEnd {
   @Benchmark
   @BenchmarkMode(Array(Mode.AverageTime))
   @OutputTimeUnit(TimeUnit.SECONDS)
-  def predict: Double = {
+  def batchNext: Double = {
 
-    def genX(n: Int) = DenseMatrix.rand[Double](n, 1).map(x => x * 2 * Math.PI )
-    def func(x: Double) = { math.sin(x) + ( randomDouble() * 0.01 ) }
+    def genX(n: Int) = (0 until n).map { i => DenseVector.rand[Double](7) }
+    def func(x: DenseVector[Double]): Double = { math.sin(sum(x)) + ( randomDouble() * 0.01 ) }
 
     val gp = new GP(new BKernel, new ExpectedImprovement, 0.1)
 
     val obsX = genX(50)
-    val obsY = obsX(*, ::).map(x => func(x(0)))
+    val obsY = DenseVector(obsX.map(func): _*)
 
     gp.update(obsX, obsY)
 
-    val newX = genX(10000000)
-    println(newX.rows)
-    val newT = gp.predict(newX(*, ::).iterator.toIndexedSeq)
-    newT.head._1
+    val newX = gp.nextBatch(-1)
+    newX._1
+  }
+
+  @Benchmark
+  @BenchmarkMode(Array(Mode.AverageTime))
+  @OutputTimeUnit(TimeUnit.SECONDS)
+  def loopNext: Double = {
+
+    def genX(n: Int) = (0 until n).map { i => DenseVector.rand[Double](7) }
+    def func(x: DenseVector[Double]): Double = { math.sin(sum(x)) + ( randomDouble() * 0.01 ) }
+
+    val gp = new GP(new BKernel, new ExpectedImprovement, 0.1)
+
+    val obsX = genX(50)
+    val obsY = DenseVector(obsX.map(func): _*)
+
+    gp.update(obsX, obsY)
+
+    val newX = gp.next(-1)
+    newX._1
   }
 
 }

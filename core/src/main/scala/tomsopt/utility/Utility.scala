@@ -5,6 +5,6 @@ package tomsopt.utility
   */
 trait Utility {
 
-  def apply(mean: Double, variance: Double, tMax: Double): Double
+  def apply(mean: Double, variance: Double, tBest: Double): Double
 
 }
