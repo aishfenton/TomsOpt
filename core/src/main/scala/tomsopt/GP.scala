@@ -24,29 +24,28 @@ class GP(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0) {
 
   var model: Option[GPModel] = None
 
-
   // Kernel wih noise
   @inline
   private def nKernel(x1: DenseVector[Double], x2: DenseVector[Double]) = kernel(x1, x2) + noise
 
   /**
     * Calculates the kernel between all row/col pairs of matrices Ai kdot Bj. Both matrices are assumed
-    * to be in the same orientation when given (i.e. if B is additional rows of A, then it is assumed it already
-    * both A and B are rows).
+    * to be in the same orientation when given (i.e. if B is additional cols of A, then it is assumed already
+    * both A and B are cols).
     *
     * @return A kdot B
     */
   @inline
   private def kernelProduct(A: DenseMatrix[Double], B: DenseMatrix[Double]) = {
-    val g = DenseMatrix.zeros[Double](A.rows, B.rows)
-    val tA = A.t
-    val tB = B.t
-
-    cforRange(0 until A.rows) { i =>
-      val v = tA(::, i)
-      cforRange(0 until B.rows) { j =>
-        val k = nKernel(v, tB(::, j))
-        g(i, j) = k
+    val g = DenseMatrix.zeros[Double](A.cols, B.cols)
+    val al = A.cols
+    val bl = B.cols
+    val tmp = A(::, *).toIndexedSeq.toArray
+    cforRange(0 until bl) { i =>
+      val v = B(::, i)
+      cforRange(0 until al) { j =>
+        val k = nKernel(v, tmp(j))
+        g(j, i) = k
       }
     }
     g
@@ -54,28 +53,24 @@ class GP(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0) {
 
   @inline
   private def kernelProduct(A: DenseMatrix[Double], v: DenseVector[Double]) = {
-    val g = DenseVector.zeros[Double](A.rows)
-    // NB: Expensive, so moved outside loop
-    val tA = A.t
-
-    cforRange(0 until A.rows) { i =>
-      val k = nKernel(tA(::, i), v)
+    val g = DenseVector.zeros[Double](A.cols)
+    val al = A.cols
+    cforRange(0 until al) { i =>
+      val k = nKernel(A(::, i), v)
       g(i) = k
     }
     g
   }
 
   // Save some computation, and annoyingly need to ensure that same noise is
-  // applied to both i,j and j,i
+  // applied to both i,j and j,i.
+  // Assumed A in col major format.
   @inline
   private def kernelProductSym(A: DenseMatrix[Double]) = {
-    // NB: Expensive, so moved outside loop
-    val tA = A.t
-
-    val g = DenseMatrix.zeros[Double](A.rows, tA.cols)
-    cforRange(0 until A.rows) { i =>
-      cforRange(i until tA.cols) { j =>
-        val k = nKernel(tA(::, i), tA(::, j))
+    val g = DenseMatrix.zeros[Double](A.cols, A.cols)
+    cforRange(0 until A.cols) { i =>
+      cforRange(i until A.cols) { j =>
+        val k = nKernel(A(::, i), A(::, j))
         g(i, j) = k
         g(j, i) = k
       }
@@ -88,7 +83,7 @@ class GP(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0) {
     *    [  A  B ]
     *    [ B.t C ]
     */
-  private def buildMatrix(A: DenseMatrix[Double], B: DenseMatrix[Double], C: DenseMatrix[Double]) = {
+  private def expandMatrix(A: DenseMatrix[Double], B: DenseMatrix[Double], C: DenseMatrix[Double]) = {
     require(A.rows == A.cols && C.rows == C.cols)
     require(B.rows == A.rows && B.cols == C.cols)
 
@@ -101,24 +96,34 @@ class GP(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0) {
     X
   }
 
-  def update(X: IndexedSeq[DenseVector[Double]], t: DenseVector[Double]): GP = {
-    val mX = DenseMatrix(X: _*)
+  // This should be Breeze, but there's no way to contrust a Matrix from col vectors
+  @inline
+  private def makeColMatrix(vs: IndexedSeq[DenseVector[Double]]) = {
+    val rm = DenseMatrix.zeros[Double](vs.head.length, vs.length)
+    cforRange(0 until vs.length) { i =>
+      rm(::, i) := vs(i)
+    }
+    rm
+  }
+
+  def update(xs: IndexedSeq[DenseVector[Double]], t: DenseVector[Double]): GP = {
+    val X = makeColMatrix(xs)
 
     val (m, cov, newX, newT) = if (model.isDefined) {
-      val existing = model.get
-      val m = DenseVector.fill[Double](existing.X.rows + mX.rows, mean)
+      val m = model.get
+      val mean = DenseVector.fill[Double](m.X.cols + X.cols, this.mean)
 
-      val K = kernelProduct(existing.X, mX.t)
-      val C = kernelProductSym(mX)
-      val cov = buildMatrix(existing.cov, K, C)
+      val K = kernelProduct(m.X, X)
+      val C = kernelProductSym(X)
+      val cov = expandMatrix(m.cov, K, C)
 
-      val newX = DenseMatrix.vertcat(existing.X, mX)
-      val newT = DenseVector.vertcat(existing.t, t)
-      (m, cov, newX, newT)
+      val newX = DenseMatrix.horzcat(m.X, X)
+      val newT = DenseVector.vertcat(m.t, t)
+      (mean, cov, newX, newT)
     } else {
-      val m = DenseVector.fill[Double](mX.rows, mean)
-      val cov = kernelProductSym(mX)
-      (m, cov, mX, t)
+      val mean = DenseVector.fill[Double](X.cols, this.mean)
+      val cov = kernelProductSym(X)
+      (mean, cov, X, t)
     }
 
     model = Some(GPModel(m, cov, newX, newT))
@@ -169,38 +174,40 @@ class GP(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0) {
     (tMean, sqrt(tVar))
   }
 
+  // Assumed to be col major order (i.e. each feature vector x, is a column)
   def predictBatch(X: DenseMatrix[Double]) = {
     val m = model.get
     val invC = m.invC
 
     val K = kernelProduct(m.X, X)
-    val c: DenseVector[Double] = X(*, ::).map { x => nKernel(x, x) }
+    val c: DenseVector[Double] = X(::, *).map { x => nKernel(x, x) }.t
 
     val K2: DenseMatrix[Double] = dsymm(invC, K)
-    val tMean = DenseVector.fill[Double](X.rows)(mean) + (m.meanAdjustedT.t * K2).t
+    val tMean = DenseVector.fill[Double](X.cols)(mean) + (m.meanAdjustedT.t * K2).t
 
-    val tVar = DenseVector.zeros[Double](X.rows)
-    cforRange(0 until X.rows) { i =>
-      tVar(i) = c(i) - ( K2(::, i) dot K(::, i) )
+    val tVar = DenseVector.zeros[Double](X.cols)
+    cforRange(0 until X.cols) { i =>
+      tVar(i) = c(i) - (K2(::, i) dot K(::, i))
     }
 
     (tMean, sqrt(tVar))
   }
 
-  def nextBatch(lastBestT: Double, samples: Int = 10000000, blocks: Int = 100): (Double, DenseVector[Double]) = {
-    var best: (Double, DenseVector[Double]) = (0.0, null)
-    (0 until blocks).par.foreach { i =>
-      val X = DenseMatrix.rand[Double](samples / blocks, 7)
+  def nextBatch(lastBestT: Double, samples: Int = 10000000, blocks: Int = 1000): (Double, DenseVector[Double]) = {
+    (0 until blocks).par.map { i =>
+      var best: (Double, DenseVector[Double]) = (0.0, null)
+      val X = DenseMatrix.rand[Double](7, samples / blocks)
       val t = predictBatch(X)
 
-      cforRange(0 until X.rows) { i =>
-        val (m, v) = (t._1(i), t._2(i))
+      cforRange(0 until X.cols) { i =>
+        val m = t._1(i)
+        val v = t._2(i)
         val u = utility(m, v, lastBestT)
-        if (u > best._1) best = (m, X(i, ::).inner)
+        if (u > best._1) best = (m, X(::, i))
       }
-    }
+      best
+    }.head
 
-    best
   }
 
   def next(lastBestT: Double, samples: Int = 10000000): (Double, DenseVector[Double]) = {

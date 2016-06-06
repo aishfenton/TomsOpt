@@ -12,7 +12,41 @@ import spire.syntax.cfor._
 @State(Scope.Thread)
 class LinAlg {
 
-  val A = DenseMatrix.rand[Double](2000, 2000)
+  val A = DenseMatrix.rand[Double](1000, 1000)
+
+  @Benchmark
+  @BenchmarkMode(Array(Mode.AverageTime))
+  @OutputTimeUnit(TimeUnit.SECONDS)
+  def colKernel: DenseMatrix[Double] = {
+    val B = A
+    val g = DenseMatrix.zeros[Double](A.cols, B.cols)
+
+    cforRange(0 until A.cols) { i =>
+      val v = A(::, i)
+      cforRange(0 until B.cols) { j =>
+        val k = v dot B(::, j)
+        g(i, j) = k
+      }
+    }
+    g
+  }
+
+  @Benchmark
+  @BenchmarkMode(Array(Mode.AverageTime))
+  @OutputTimeUnit(TimeUnit.SECONDS)
+  def rowKernel: DenseMatrix[Double] = {
+    val tA = A.t
+    val tB = A.t
+    val g = DenseMatrix.zeros[Double](A.rows, tB.rows)
+    cforRange(0 until A.rows) { i =>
+      val v = tA(::, i)
+      cforRange(0 until tB.cols) { j =>
+        val k = v dot tB(::, j)
+        g(i, j) = k
+      }
+    }
+    g
+  }
 
   // I'm assuming there is some cost to many v * M multplications, as opposed to going a single
   // large M * M. Assumed costs are a) small JNI overhead, b) further BLAS optimizations on M*M

@@ -11,7 +11,10 @@ lazy val commonSettings = Seq(
   ),
   scalacOptions += "-optimize",
   javaOptions in run ++= Seq(
-    "-Xmx8G"
+    "-Xmx8G",
+    "-XX:+AggressiveOpts"
+//    "-XX:+UnlockDiagnosticVMOptions",
+//    "-XX:+PrintInlining",
   )
 )
 
@@ -31,4 +34,4 @@ lazy val benchmark = project
   .settings(noPublishSettings)
   .dependsOn(core)
 
-addCommandAlias("bench", "benchmark/jmh:run -i 10 -wi 10 -f1")
+addCommandAlias("bench", "benchmark/jmh:run -i 4 -wi 4 -f1 EndToEnd")
