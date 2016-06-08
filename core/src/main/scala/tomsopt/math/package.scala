@@ -15,7 +15,6 @@ package object math {
     * Shamelessly stolen from:
     *   https://github.com/lawrennd/ndlutil/blob/master/matlab/jitChol.m
     */
-  @inline
   def jChol(A: DenseMatrix[Double], maxRetries: Int = 10) = {
     def run(X: DenseMatrix[Double], jitter: Double, retries: Int): DenseMatrix[Double] = {
       try {
@@ -33,12 +32,11 @@ package object math {
       }
     }
 
-    require(A.rows == A.cols)
-    val j = (diag(A).sum / A.rows).abs * 1e-6
+    require(A.rows == A.cols, "Matrix should be square")
+    val j = (sum(diag(A)) / A.rows).abs * 1e-6
     run(A, j, 0)
   }
 
-  @inline
   def dsmv(A: DenseMatrix[Double], x: DenseVector[Double]) = {
     val rv = DenseVector.zeros[Double](x.length)
 

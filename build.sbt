@@ -9,9 +9,13 @@ lazy val commonSettings = Seq(
     "com.github.scopt" %% "scopt" % "3.4.0",
     "com.github.aishfenton" %% "vegas" % "0.2.4"
   ),
-  scalacOptions += "-optimize",
+  scalacOptions ++= Seq(
+//    "-Yinline-warnings",
+//    "-deprecation",
+    "-optimize"
+  ),
   javaOptions in run ++= Seq(
-    "-Xmx8G",
+    "-Xmx12G",
     "-XX:+AggressiveOpts"
 //    "-XX:+UnlockDiagnosticVMOptions",
 //    "-XX:+PrintInlining",
@@ -19,7 +23,14 @@ lazy val commonSettings = Seq(
 )
 
 lazy val core = project
+  .dependsOn(native % Runtime)
   .settings(commonSettings)
+  .settings(target in javah := (sourceDirectory in nativeCompile in native).value / "include")
+
+lazy val native = project
+  .settings(commonSettings)
+  .settings(sourceDirectory in nativeCompile := sourceDirectory.value)
+  .enablePlugins(JniNative)
 
 lazy val noPublishSettings = Seq(
   publish := (),
@@ -33,5 +44,17 @@ lazy val benchmark = project
   .settings(commonSettings)
   .settings(noPublishSettings)
   .dependsOn(core)
+  .settings(
+    javaOptions ++= Seq(
+      // Yuk, need to figure out why this isn't happening automagically
+      "-Djava.library.path=/Users/afenton/Documents/netflix/src/gp-scala/native/target/native/x86_64-darwin/bin"
+    )
+  )
 
 addCommandAlias("bench", "benchmark/jmh:run -i 4 -wi 4 -f1 EndToEnd")
+
+lazy val root = (project in file("."))
+  .aggregate(core, benchmark)
+  .settings(commonSettings)
+
+
