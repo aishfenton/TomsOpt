@@ -1,10 +1,9 @@
-package tomsopt
+package tomsopt.gp
 
 import breeze.linalg._
 import breeze.numerics._
 import spire.syntax.cfor._
 import tomsopt.kernel._
-import tomsopt.utility.Utility
 import tomsopt.math._
 
 /**
@@ -30,10 +29,19 @@ case class GPModel(mean: DenseVector[Double], cov: DenseMatrix[Double], X: Dense
 
 }
 
-class GaussianProcess(kernel: Kernel, utility: Utility, noise: Double, mean: Double = 0.0,
-                      kernelUpdater: KernelUpdater = new KernelUpdaterArray) {
+/**
+  * A Gaussan Process Regression model. Based on formulation described in
+  * Bishop - Patterns Recognition and Machine Learning, Chap 6.
+  * @param kernel The model's kernel function.
+  * @param noise The model's noise parameter.
+  * @param mean The model's mean. The default value of 0.0 is probably sufficient.
+  * @param useNative Whether to use JNI-Native routines to update the Kernel Matrix. Defatuls to true.
+  */
+class GaussianProcess(kernel: Kernel, noise: Double, mean: Double = 0.0, useNative: Boolean = true) {
 
   var model: Option[GPModel] = None
+
+  private val kernelUpdater = if (useNative) new KernelUpdaterNative else new KernelUpdaterArray
 
   private def updateKernel(A: DenseMatrix[Double], B: DenseMatrix[Double]) = kernelUpdater.update(A, B, noise, kernel)
   private def updateKernel(A: DenseMatrix[Double], b: DenseVector[Double]) = kernelUpdater.update(A, b, noise, kernel)
@@ -57,31 +65,29 @@ class GaussianProcess(kernel: Kernel, utility: Utility, noise: Double, mean: Dou
     X
   }
 
-  // This should be Breeze, but there's no way to construct a Matrix from col vectors
-  @inline
-  private def makeColMatrix(vs: IndexedSeq[DenseVector[Double]]) = {
-    val rm = DenseMatrix.zeros[Double](vs.head.length, vs.length)
-    cforRange(0 until vs.length) { i =>
-      rm(::, i) := vs(i)
-    }
-    rm
-  }
-
+  /**
+    * Update the given GP model with the given observations.
+    * @param xs A Seq of DenseVectors representing features points
+    * @param t A DenseVector of observed values for the given features
+    */
   def update(xs: IndexedSeq[DenseVector[Double]], t: DenseVector[Double]): GaussianProcess = {
-    val X = makeColMatrix(xs)
+    val X = buildMatrixFromColVecs(xs)
 
     val (m, cov, newX, newT) = if (model.isDefined) {
       val m = model.get
       val mean = DenseVector.fill[Double](m.X.cols + X.cols, this.mean)
 
+      // Work out parts missing from Cov and glue together a new matrix
       val K = updateKernel(m.X, X)
       val C = updateKernel(X, X)
       val cov = expandMatrix(m.cov, K, C)
 
+      // Concatinate new observation onto existing ones
       val newX = DenseMatrix.horzcat(m.X, X)
       val newT = DenseVector.vertcat(m.t, t)
       (mean, cov, newX, newT)
     } else {
+      // Easy, just set observations as current model
       val mean = DenseVector.fill[Double](X.cols, this.mean)
       val cov = updateKernel(X, X)
       (mean, cov, X, t)
@@ -96,82 +102,60 @@ class GaussianProcess(kernel: Kernel, utility: Utility, noise: Double, mean: Dou
     this
   }
 
-  def predict(X: IndexedSeq[DenseVector[Double]]): Array[(Double, Double)] = {
-    X.par.map { v =>
-      predict(v)
-    }.toArray
-  }
-
   /**
     * Predicts a t for a given feature.
+    *
     * @param x A DenseVector containing the features of the given x.
     * @return A 2-tuple containing the mean and variance of the predicted t.
     */
-  def predict(x: DenseVector[Double]) = {
-    val m = model.get
-    val invC = m.invC
-
-    val k = updateKernel(m.X, x)
-    val c = updateKernel(x, x)
-
-    val tkiC: Transpose[DenseVector[Double]] = dsmv(invC, k).t
-    val tMean = mean + (tkiC * m.tMinusMean)
-    val tVar = c - (tkiC * k)
-
-    (tMean, sqrt(tVar))
+  def predict(x: DenseVector[Double]): (Double, Double) = {
+    val r = predict(x.toDenseMatrix)
+    (r._1(0), r._2(0))
   }
 
   /**
     * Predicts a vector of t's for a given matrix of features.
-    * @param X new features to predict a t for. X is assumed to be in col major order ()
-    * @return A 2-tuple containing a DenseVector of means and DenseVector of variances of the predicted t's.
+    * For GP with parameters:
+    *     $$ m = [ m_a, m_b ] $$ and
+    *     $$
+    *       \Sigma =
+    *         \begin{bmatrix}
+    *           C & K \\
+    *           K^t & c
+    *         \end{bmatrix}
+    *     $$
+    *   Where we already know $$ m_a, C $$, our observations so far, we can predict $$ m_b, K,c $$ by conditional
+    *   our Gaussian on these.
+    *     $$ m_{b|a} = m_b + K^t C^{-1} (t_b - m_b) $$
+    *     $$ v_{b|a} = C_{b} - K^t C^1 K $$
+    *
+    * @param X new features to predict a t's for. X is assumed to be in col major order.
+    * @return A 2-tuple containing DenseVector's of means and variances of the predicted t's.
     */
-  def predict(X: DenseMatrix[Double]) = {
+  def predict(X: DenseMatrix[Double]): (DenseVector[Double], DenseVector[Double]) = {
     val m = model.get
     val invC = m.invC
 
     val K = updateKernel(m.X, X)
 
+    // We assume that each unknown, t, is independent of each other. It doesn't necessary have to be done this
+    // way, but it makes the inference much more tractable.
     val c: DenseVector[Double] = X(::, *).map { x => updateKernel(x, x) }.t
 
+    // Cache $$ K^ C^{-1} $$, since used across both equations. Also C is symmetric (so there so is C^-1), we make use
+    // of this to avoid transposing matrix until in smaller dimensions (maybe not necessary should re-benchmark).
     val K2: DenseMatrix[Double] = dsymm(invC, K)
     val tMean = DenseVector.fill[Double](X.cols)(mean) + (m.tMinusMean.t * K2).t
 
+    // Since we assume new observations are independent we can also assume that $$ K^t C^1 K $$ is diagonal. But rather
+    // than computing full 3 matrix multiplications, to then only take the diagonal, we save ourselves some computations
+    // and only compute diagonal entries.
     val tVar = DenseVector.zeros[Double](X.cols)
     cforRange(0 until X.cols) { i =>
       tVar(i) = c(i) - (K2(::, i) dot K(::, i))
     }
 
     (tMean, sqrt(tVar))
-  }
-
-  def nextBatch(lastBestT: Double, samples: Int = 10000000, blocks: Int = 10000): (Double, DenseVector[Double]) = {
-    (0 until blocks).par.map { i =>
-      var best: (Double, DenseVector[Double]) = (0.0, null)
-      val X = DenseMatrix.rand[Double](7, samples / blocks)
-      val t = predict(X)
-
-      cforRange(0 until X.cols) { i =>
-        val m = t._1(i)
-        val v = t._2(i)
-        val u = utility(m, v, lastBestT)
-        if (u > best._1) best = (m, X(::, i))
-      }
-      best
-    }.head
-
-  }
-
-  def next(lastBestT: Double, samples: Int = 10000000): (Double, DenseVector[Double]) = {
-    var best: (Double, DenseVector[Double]) = (0.0, null)
-    (0 until samples).par.foreach { i =>
-      val x = DenseVector.rand[Double](7)
-      val t = predict(x)
-      val u = utility(t._1, t._2, lastBestT)
-      if (u > best._1) best = (t._1, x)
-    }
-
-    best
   }
 
 }

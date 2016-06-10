@@ -16,7 +16,8 @@ class KernelUpdaterNative extends KernelUpdater {
     * @param kernel The Kernel class used to do the update
     */
   def update(A: DenseMatrix[Double], B: DenseMatrix[Double], noise: Double, kernel: Kernel) = {
-    if (!kernel.supportsNative) throw new Exception(s"Kernel ${kernel.getClass.getName} doesn't support native")
+    require(A.rows == B.rows && B.rows > 0, "A and B matrices can't have different number of rows, and both must have > 0 rows")
+    require(kernel.supportsNative, s"Kernel ${kernel.getClass.getName} doesn't support native")
 
     val C = DenseMatrix.zeros[Double](A.cols, B.cols)
     val result = _nativeUpdate(
@@ -37,7 +38,8 @@ class KernelUpdaterNative extends KernelUpdater {
     * @param kernel The Kernel class used to do the update
     */
   def update(A: DenseMatrix[Double], b: DenseVector[Double], noise: Double, kernel: Kernel) = {
-    if (!kernel.supportsNative) throw new Exception(s"Kernel ${kernel.getClass.getName} doesn't support native")
+    require(A.rows == b.length && b.length > 0, "A and b can't be different sizes (i.e rows and length) and must be > 0")
+    require(kernel.supportsNative, s"Kernel ${kernel.getClass.getName} doesn't support native")
 
     val c = DenseVector.zeros[Double](A.cols)
     val result = _nativeUpdate(

@@ -5,9 +5,7 @@ lazy val commonSettings = Seq(
   scalaVersion := "2.11.8",
   libraryDependencies ++= Seq(
     "org.scalanlp" %% "breeze" % "0.12",
-    "org.scalanlp" %% "breeze-natives" % "0.12",
-    "com.github.scopt" %% "scopt" % "3.4.0",
-    "com.github.aishfenton" %% "vegas" % "0.2.4"
+    "org.scalanlp" %% "breeze-natives" % "0.12"
   ),
   scalacOptions ++= Seq(
 //    "-Yinline-warnings",
@@ -26,6 +24,12 @@ lazy val core = project
   .dependsOn(native % Runtime)
   .settings(commonSettings)
   .settings(target in javah := (sourceDirectory in nativeCompile in native).value / "include")
+  .settings(libraryDependencies ++= Seq(
+    "com.github.scopt" %% "scopt" % "3.4.0",
+    "com.github.aishfenton" %% "vegas" % "0.2.4",
+    "org.scalatest" %% "scalatest" % "2.2.6" % "test",
+    "org.scalacheck" %% "scalacheck" % "1.12.5" % "test"
+  ))
 
 lazy val native = project
   .settings(commonSettings)

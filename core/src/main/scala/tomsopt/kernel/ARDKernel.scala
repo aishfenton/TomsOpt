@@ -2,12 +2,10 @@ package tomsopt.kernel
 
 import breeze.linalg._
 import breeze.numerics._
+import ch.jodersky.jni.nativeLoader
 import spire.syntax.cfor._
 
-/**
-  * @author Aish Fenton.
-  */
-// ARD Kernel from Bishop's Pattern Recognition Eqn. 6.63.
+@nativeLoader("TomsOpt0")
 class ARDKernel(param: Array[Double] = Array(0.1, 0.1, 0.1, 0.1)) extends Kernel {
 
   val param1 = param(0)
@@ -30,5 +28,8 @@ class ARDKernel(param: Array[Double] = Array(0.1, 0.1, 0.1, 0.1)) extends Kernel
     }
     (param1 * exp(-0.5 * param2 * sdist)) + param3 + (param4 * dot)
   }
+
+  @native
+  def applyNative(x1: Array[Double], x1Offset: Int, x2: Array[Double], x2Offset: Int, dim: Int): Double;
 
 }

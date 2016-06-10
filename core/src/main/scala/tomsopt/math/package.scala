@@ -1,6 +1,7 @@
 package tomsopt
 
 import breeze.linalg._
+import spire.syntax.cfor._
 
 /**
   * @author Aish Fenton.
@@ -58,6 +59,20 @@ package object math {
       0.0, C.data, 0, C.majorStride
     )
     C
+  }
+
+  /**
+    * Constructs a matrix from the given Column vectors.
+    * TODO This should be Breeze, but there's no built-in way to construct a Matrix from col vectors, issue filed
+    * here: https://github.com/scalanlp/breeze/issues/550
+    */
+  @inline
+  def buildMatrixFromColVecs(vs: IndexedSeq[DenseVector[Double]]) = {
+    val rm = DenseMatrix.zeros[Double](vs.head.length, vs.length)
+    cforRange(0 until vs.length) { i =>
+      rm(::, i) := vs(i)
+    }
+    rm
   }
 
 

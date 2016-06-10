@@ -1,16 +1,18 @@
 #include <stdio.h>
 #include "tomsopt_kernel_KernelUpdaterNative.h"
+#include "tomsopt_kernel_ARDKernel.h"
+#include "tomsopt_kernel_Matern52.h"
 #include <math.h>
 #include <string.h>
 
 // -----------------
-// Headers
+// Declarations
 // -----------------
 
 typedef double (*kernelFn)(double *, double *, int);
 
 double ardKernel(double *v1, double *v2, int dim);
-double matern52Kernel(double *v1, double *v2, int dim);
+double matern52(double *v1, double *v2, int dim);
 
 void updateKernel(double *a, int aOffset, int aLength,
                   double *b, int bOffset, int bLength,
@@ -47,7 +49,7 @@ JNIEXPORT jint JNICALL Java_tomsopt_kernel_KernelUpdaterNative__1nativeUpdate
     kernelPtr = &ardKernel;
   }
   else if (strcmp(kernelStr, "tomsopt.kernel.Matern52")==0) {
-    kernelPtr = &ardKernel;
+    kernelPtr = &matern52;
   }
   else  {
     fprintf(stderr, "ERROR: Couldn't find kernel %s\n", kernelStr);
@@ -67,10 +69,52 @@ JNIEXPORT jint JNICALL Java_tomsopt_kernel_KernelUpdaterNative__1nativeUpdate
   return 0;
 }
 
+/*
+ * Class:     tomsopt_kernel_ARDKernel
+ * Method:    applyNative
+ * Signature: ([DI[DII)D
+ */
+JNIEXPORT jdouble JNICALL Java_tomsopt_kernel_ARDKernel_applyNative
+  (JNIEnv *env, jobject classz, jdoubleArray jx1, jint jx1Offset, jdoubleArray jx2, jint jx2Offset, jint dim) {
+
+  jdouble *x1 = (*env)->GetPrimitiveArrayCritical(env, jx1, 0);
+  jdouble *x2 = (*env)->GetPrimitiveArrayCritical(env, jx2, 0);
+
+  jdouble result = ardKernel(&x1[jx1Offset], &x2[jx2Offset], dim);
+
+  (*env)->ReleasePrimitiveArrayCritical(env, jx1, x1, 0);
+  (*env)->ReleasePrimitiveArrayCritical(env, jx2, x2, 0);
+
+  return result;
+}
+
+/*
+ * Class:     tomsopt_kernel_Matern52
+ * Method:    applyNative
+ * Signature: ([DI[DII)D
+ */
+JNIEXPORT jdouble JNICALL Java_tomsopt_kernel_Matern52_applyNative
+  (JNIEnv *env, jobject classz, jdoubleArray jx1, jint jx1Offset, jdoubleArray jx2, jint jx2Offset, jint dim) {
+
+  jdouble *x1 = (*env)->GetPrimitiveArrayCritical(env, jx1, 0);
+  jdouble *x2 = (*env)->GetPrimitiveArrayCritical(env, jx2, 0);
+
+  jdouble result = matern52(&x1[jx1Offset], &x2[jx2Offset], dim);
+
+  (*env)->ReleasePrimitiveArrayCritical(env, jx1, x1, 0);
+  (*env)->ReleasePrimitiveArrayCritical(env, jx2, x2, 0);
+
+  return result;
+}
+
 // -----------------
-// C implementations
+// Implementations
 // -----------------
 
+/**
+ * TODO:
+ * - All Kernels need an extra params array based to them.
+ */
 void updateKernel(double *a, int aOffset, int aLength,
                   double *b, int bOffset, int bLength,
                   double *c, int cOffset, int cLength,
@@ -95,7 +139,7 @@ void updateKernel(double *a, int aOffset, int aLength,
       int aOff = (j * dim) + aOffset;
       int cOff = (i * aCols) + j + cOffset;
 
-      c[cOff] = (* kernelPtr)(&a[aOff], bi, dim); // + noise;
+      c[cOff] = (* kernelPtr)(&a[aOff], bi, dim) + noise;
     }
   }
 
@@ -112,11 +156,11 @@ double ardKernel(double *v1, double *v2, int dim) {
     sdist += pow(a-b, 2);
     dot += a * b;
   }
-  double result = (0.5 * exp(-0.5 * 0.5 * sdist)) + 0.5 + (0.5 * dot);
+  double result = (0.1 * exp(-0.5 * 0.1 * sdist)) + 0.1 + (0.1 * dot);
   return result;
 }
 
-double matern52Kernel(double *v1, double *v2, int dim) {
+double matern52(double *v1, double *v2, int dim) {
   double r2 = 0.0;
   for (int i = 0; i < dim ; i++) {
     double a = v1[i];
@@ -128,3 +172,5 @@ double matern52Kernel(double *v1, double *v2, int dim) {
   double result = 0.1 * (1 + (SQRT5 * r) + (D53 * r2)) * exp(-(SQRT5 * r));
   return result;
 }
+
+

@@ -9,6 +9,8 @@ import spire.syntax.cfor._
 class KernelUpdaterArray extends KernelUpdater {
 
   def update(A: DenseMatrix[Double], B: DenseMatrix[Double], noise: Double, kernel: Kernel) = {
+    require(A.rows == B.rows && B.rows > 0, "A and B matrices can't have different number of rows, and both must have > 0 rows")
+
     val C = DenseMatrix.zeros[Double](A.cols, B.cols)
     val ad = A.data
     val aOffset = A.offset
@@ -30,6 +32,8 @@ class KernelUpdaterArray extends KernelUpdater {
   }
 
   def update(A: DenseMatrix[Double], b: DenseVector[Double], noise : Double, kernel: Kernel) = {
+    require(A.rows == b.length && b.length > 0, "A and b can't be different sizes (i.e rows and length) and must be > 0")
+
     val c = DenseVector.zeros[Double](A.cols)
     val ad = A.data
     val aOffset = A.offset

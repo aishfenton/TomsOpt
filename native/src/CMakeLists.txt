@@ -12,6 +12,7 @@ cmake_minimum_required(VERSION 2.6)
 project (TomsOpt)
 
 # Force to RELEASE
+# XXX This can be removed once https://github.com/jodersky/sbt-jni/pull/8/files is released.
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING
       "Choose the type of build, options are: Debug Release
