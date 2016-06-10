@@ -113,7 +113,7 @@ JNIEXPORT jdouble JNICALL Java_tomsopt_kernel_Matern52_applyNative
 
 /**
  * TODO:
- * - All Kernels need an extra params array based to them.
+ * - All Kernels need an extra params array passed to them.
  */
 void updateKernel(double *a, int aOffset, int aLength,
                   double *b, int bOffset, int bLength,
