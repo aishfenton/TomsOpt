@@ -42,6 +42,7 @@ lazy val noPublishSettings = Seq(
   publishArtifact := false
 )
 
+
 lazy val benchmark = project
   .settings(moduleName := "tomsopt-benchmark")
   .enablePlugins(JmhPlugin)
@@ -49,9 +50,9 @@ lazy val benchmark = project
   .settings(noPublishSettings)
   .dependsOn(core)
   .settings(
+    // XXX not sure why can't find lib, so needed for now
     javaOptions ++= Seq(
-      // Yuk, need to figure out why this isn't happening automagically
-      "-Djava.library.path=/Users/afenton/Documents/netflix/src/gp-scala/native/target/native/x86_64-darwin/bin"
+      "-Djava.library.path=" + (baseDirectory in LocalRootProject).value.getAbsolutePath + "/native/target/native/x86_64-darwin/bin"
     )
   )
 
