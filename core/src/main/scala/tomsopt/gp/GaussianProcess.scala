@@ -67,7 +67,7 @@ class GaussianProcess(kernel: Kernel, noise: Double, mean: Double = 0.0, useNati
 
   /**
     * Update the given GP model with the given observations.
-    * @param xs A Seq of DenseVectors representing features points
+    * @param xs A Seq of DenseVectors representing features points - 1
     * @param t A DenseVector of observed values for the given features
     */
   def update(xs: IndexedSeq[DenseVector[Double]], t: DenseVector[Double]): GaussianProcess = {
@@ -82,7 +82,7 @@ class GaussianProcess(kernel: Kernel, noise: Double, mean: Double = 0.0, useNati
       val C = updateKernel(X, X)
       val cov = expandMatrix(m.cov, K, C)
 
-      // Concatinate new observation onto existing ones
+      // Concatenate new observation onto existing ones
       val newX = DenseMatrix.horzcat(m.X, X)
       val newT = DenseVector.vertcat(m.t, t)
       (mean, cov, newX, newT)
@@ -126,7 +126,7 @@ class GaussianProcess(kernel: Kernel, noise: Double, mean: Double = 0.0, useNati
     *     $$
     *   Where we already know $$ m_a, C $$, our observations so far, we can predict $$ m_b, K,c $$ by conditional
     *   our Gaussian on these.
-    *     $$ m_{b|a} = m_b + K^t C^{-1} (t_b - m_b) $$
+    *     $$ m_{b|a} = m_b + K^t C^{-1} (t_b - m_a) $$
     *     $$ v_{b|a} = C_{b} - K^t C^1 K $$
     *
     * @param X new features to predict a t's for. X is assumed to be in col major order.

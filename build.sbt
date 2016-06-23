@@ -62,4 +62,6 @@ lazy val root = (project in file("."))
   .aggregate(core, benchmark)
   .settings(commonSettings)
 
-
+// Clears screen between refreshes in continuous mode
+maxErrors := 5
+triggeredMessage := Watched.clearWhenTriggered
